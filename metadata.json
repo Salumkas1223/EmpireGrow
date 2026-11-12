@@ -1,0 +1,6 @@
+{
+  "name": "DIGITALEMPIRE",
+  "description": "3D Business & City Building Simulation with dynamic economy, companies, research, and real-time multiplayer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
