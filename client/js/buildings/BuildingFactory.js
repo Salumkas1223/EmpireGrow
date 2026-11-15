@@ -77,74 +77,88 @@ export function createBuildingModel(buildingData, textures) {
 
   const metalCladMat = new THREE.MeshStandardMaterial({
     color: baseHex,
-    roughness: 0.34,
-    metalness: 0.72,
+    roughness: 0.30,
+    metalness: 0.75,
+    envMapIntensity: 1.30,
   });
   const corrugatedMat = new THREE.MeshStandardMaterial({
     map: textures.corrugatedMap,
     bumpMap: textures.corrugatedBump,
     bumpScale: 0.06,
     color: baseHex,
-    roughness: 0.45,
-    metalness: 0.62,
+    roughness: 0.42,
+    metalness: 0.65,
+    envMapIntensity: 1.20,
   });
   const brickMat = new THREE.MeshStandardMaterial({
     map: textures.brickMap,
     bumpMap: textures.brickBump,
     bumpScale: 0.06,
-    roughness: 0.85,
+    roughness: 0.84,
     metalness: 0.04,
   });
   const roofMat = new THREE.MeshStandardMaterial({
     map: textures.roofGravelMap,
-    roughness: 0.92,
+    roughness: 0.90,
     metalness: 0.04,
   });
   const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xe6f2ff,
     map: textures.windowMap,
     emissiveMap: textures.windowEmissive,
     bumpMap: textures.windowBump,
     bumpScale: 0.08,
     roughnessMap: textures.windowRough,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 0.30,
-    roughness: 0.12,
-    metalness: 0.82,
-    clearcoat: 0.95,
-    clearcoatRoughness: 0.06,
+    emissiveIntensity: 0.32,
+    roughness: 0.085,
+    metalness: 0.84,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.04,
+    envMapIntensity: 1.55,
   });
   const facadeMat = new THREE.MeshStandardMaterial({
     map: textures.facadeMap,
     emissiveMap: textures.facadeEmissive,
     emissive: new THREE.Color(0xffffff),
     emissiveIntensity: 0.28,
-    roughness: 0.68,
+    roughness: 0.64,
     metalness: 0.14,
   });
   const trimMat = new THREE.MeshStandardMaterial({
     color: accentHex,
-    roughness: 0.22,
-    metalness: 0.86,
+    roughness: 0.20,
+    metalness: 0.88,
+    envMapIntensity: 1.40,
   });
   const darkSteelMat = new THREE.MeshStandardMaterial({
     color: 0x1e293b,
-    roughness: 0.36,
-    metalness: 0.82,
+    roughness: 0.32,
+    metalness: 0.85,
+    envMapIntensity: 1.25,
   });
   const stoneMat = new THREE.MeshStandardMaterial({
     map: textures.stoneMap,
     bumpMap: textures.sidewalkBump,
-    bumpScale: 0.04,
-    color: 0xaab4c2,
-    roughness: 0.76,
+    bumpScale: 0.045,
+    color: 0xd6dee8,
+    roughness: 0.74,
     metalness: 0.06,
   });
   const lobbyGlowMat = new THREE.MeshStandardMaterial({
     color: 0x0f172a,
     emissive: 0xfef3c7,
-    emissiveIntensity: 0.75,
-    roughness: 0.14,
+    emissiveIntensity: 0.82,
+    roughness: 0.12,
     metalness: 0.45,
+    envMapIntensity: 1.25,
+  });
+  const crownGlowMat = new THREE.MeshStandardMaterial({
+    color: accentHex,
+    emissive: accentHex,
+    emissiveIntensity: 0.45,
+    roughness: 0.2,
+    metalness: 0.5,
   });
   const beaconMat = new THREE.MeshStandardMaterial({
     color: 0xef4444,
@@ -196,7 +210,10 @@ export function createBuildingModel(buildingData, textures) {
       hvac.castShadow = true;
       const fanHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.22, 12), darkSteelMat);
       fanHousing.position.set(-w * 0.18, y + 0.82, d * 0.14);
-      modelRoot.add(hvac, fanHousing);
+      const fanRotor = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.04, 0.11), trimMat);
+      fanRotor.position.set(-w * 0.18, y + 0.94, d * 0.14);
+      animatedParts.push({ mesh: fanRotor, axis: 'y', speed: 6.5 });
+      modelRoot.add(hvac, fanHousing, fanRotor);
     }
   };
 
@@ -384,6 +401,10 @@ export function createBuildingModel(buildingData, textures) {
     const roofY = 1.8 + h;
     addParapetRoof(7.8, 7.8, roofY, false);
 
+    // Emissive Architectural Crown Rim
+    const crownBand = new THREE.Mesh(new THREE.BoxGeometry(8.05, 0.22, 8.05), crownGlowMat);
+    crownBand.position.y = roofY - 0.15;
+
     // Chiller cooling bank with spinning axial fan
     const chiller = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.15, 2.6), metalCladMat);
     chiller.position.set(-1.3, roofY + 0.62, -1.2);
@@ -393,7 +414,7 @@ export function createBuildingModel(buildingData, textures) {
     dish.position.set(2.0, roofY + 1.45, 2.0);
     dish.rotation.x = 0.45;
     animatedParts.push({ mesh: dish, axis: 'y', speed: 1.5 });
-    modelRoot.add(podium, lobby, core, chiller, dishBase, dish);
+    modelRoot.add(podium, lobby, core, crownBand, chiller, dishBase, dish);
   } else if (type === 'retail_plaza') {
     const h = 4.6 * lvlBoost;
     const plaza = new THREE.Mesh(createBeveledRectGeo(11.0, 10.8, 0.42, 0.1), stoneMat);
@@ -506,6 +527,34 @@ export function createBuildingModel(buildingData, textures) {
     spire.position.set(1.4, roofY + 1.6 + (4.8 + level * 0.8) / 2, -1.2);
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), beaconMat);
     beacon.position.set(1.4, roofY + 1.6 + 4.8 + level * 0.8, -1.2);
+
+    // Architectural Skyline Crown Accent + Vertical Pilaster Fins + Ground Planters & Uplight Bollards
+    if (type === 'bank_hq' || type === 'global_skyscraper') {
+      const crownRim = new THREE.Mesh(new THREE.BoxGeometry(6.62, 0.26, 6.62), crownGlowMat);
+      crownRim.position.y = roofY - 0.14;
+      modelRoot.add(crownRim);
+      for (const pf of [-1.7, 1.7]) {
+        const finNS = new THREE.Mesh(new THREE.BoxGeometry(0.18, lowerH + 0.25, 8.46), trimMat);
+        finNS.position.set(pf, 2.4 + lowerH / 2, 0);
+        const finEW = new THREE.Mesh(new THREE.BoxGeometry(8.46, lowerH + 0.25, 0.18), trimMat);
+        finEW.position.set(0, 2.4 + lowerH / 2, pf);
+        modelRoot.add(finNS, finEW);
+      }
+    }
+    for (const px of [-3.6, 3.6]) {
+      const planter = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.42, 0.85), stoneMat);
+      planter.position.set(px, 0.21, 5.6);
+      const shrub = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.36, 0.65), hedgeMat);
+      shrub.position.set(px, 0.54, 5.6);
+      modelRoot.add(planter, shrub);
+    }
+    for (const lx of [-2.4, 2.4]) {
+      const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.65, 8), darkSteelMat);
+      bollard.position.set(lx, 0.32, 5.75);
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.14, 8), lobbyGlowMat);
+      lens.position.set(lx, 0.56, 5.75);
+      modelRoot.add(bollard, lens);
+    }
 
     modelRoot.add(podium, lobby, entranceCanopy, lowerShaft, setbackTrim, upperShaft, mechBox, spire, beacon);
   }
@@ -795,7 +844,7 @@ export function createBuildingModel(buildingData, textures) {
       modelRoot,
       animatedParts,
       smokeEmitters,
-      windowMaterials: [glassMat, facadeMat, lobbyGlowMat],
+      windowMaterials: [glassMat, facadeMat, lobbyGlowMat, crownGlowMat],
       craneBoom,
       craneTrolley,
       craneCables,
@@ -810,7 +859,7 @@ export function createBuildingModel(buildingData, textures) {
     modelRoot,
     animatedParts,
     smokeEmitters,
-    windowMaterials: [glassMat, facadeMat, lobbyGlowMat],
+    windowMaterials: [glassMat, facadeMat, lobbyGlowMat, crownGlowMat],
     craneBoom,
     craneTrolley: null,
     craneCables: null,

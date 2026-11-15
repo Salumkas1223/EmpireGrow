@@ -34,7 +34,7 @@ export const GAME_CONFIG = {
   MAX_OFFLINE_HOURS: 24,
   XP_PER_LEVEL_BASE: 500,
   XP_LEVEL_EXPONENT: 1.38,
-  CITY_GRID_HALF: 140,
+  CITY_GRID_HALF: 185,
   BLOCK_SIZE: 32,
   ROAD_WIDTH: 8,
 };
@@ -104,24 +104,28 @@ export const DISTRICTS: Record<string, DistrictDef> = {
 
 function generateCityPlots(): PlotBlueprint[] {
   const plots: PlotBlueprint[] = [];
-  // City blocks centered on a 4x4 grid of blocks (spacing = 40 units between road centers)
-  // Roads run at x = -80, -40, 0, 40, 80 and z = -80, -40, 0, 40, 80
-  // Inside each 32x32 block (center at -60, -20, +20, +60), we place 3 buildable plots (12x12 each) + ambient structures
-  const blockCenters = [-60, -20, 20, 60];
+  // City blocks centered on a 6x6 grid of blocks (spacing = 40 units between road centers)
+  // Roads run at x = -120, -80, -40, 0, 40, 80, 120 and z = -120, -80, -40, 0, 40, 80, 120
+  // Inside each 32x32 block, we place 3 buildable plots (12.5x12.5 each) + park/woodland quadrant (108 plots total)
+  const blockCenters = [-100, -60, -20, 20, 60, 100];
   let idx = 1;
 
   const districtForBlock = (bx: number, bz: number): { district: string; zone: PlotBlueprint['zoneType'] } => {
-    if (bx >= 20 && bz >= 20 && bx <= 20 && bz <= 20) return { district: 'downtown', zone: 'commercial' };
-    if (bx === -20 && bz === -20) return { district: 'downtown', zone: 'commercial' };
-    if (bx === 20 && bz === -20) return { district: 'techpark', zone: 'tech' };
-    if (bx === 60 && bz <= -20) return { district: 'techpark', zone: 'tech' };
-    if (bx === -60 && bz >= 20) return { district: 'harbor', zone: 'logistics' };
-    if (bx === -20 && bz === 60) return { district: 'harbor', zone: 'logistics' };
-    if (bx === -60 && bz <= -20) return { district: 'industrial', zone: 'industrial' };
-    if (bx === -20 && bz === -60) return { district: 'industrial', zone: 'industrial' };
-    if (bx === 60 && bz >= 20) return { district: 'energy', zone: 'energy' };
-    if (bx === 20 && bz === 60) return { district: 'residential', zone: 'residential' };
-    if (bx === -20 && bz === 20) return { district: 'downtown', zone: 'commercial' };
+    // South-West Waterfront: Harbor Logistics (6 blocks = 18 plots)
+    if (bx <= -60 && bz >= 20) return { district: 'harbor', zone: 'logistics' };
+    // North-West Quadrant: Industrial Belt (6 blocks = 18 plots)
+    if (bx <= -60 && bz <= -20) return { district: 'industrial', zone: 'industrial' };
+    // North-East Innovation Sector: Tech Park (6 blocks = 18 plots)
+    if ((bx >= 20 && bz === -100) || (bx >= 60 && bz === -60) || (bx === 100 && bz === -20)) {
+      return { district: 'techpark', zone: 'tech' };
+    }
+    // South-East Coast & Airport Strip: Energy Corridor (6 blocks = 18 plots)
+    if (bx >= 60 && bz >= 20) return { district: 'energy', zone: 'energy' };
+    // Central Skyline Core: Financial Downtown (6 blocks = 18 plots)
+    if ((Math.abs(bx) <= 20 && Math.abs(bz) <= 20) || (Math.abs(bx) <= 20 && bz === -60)) {
+      return { district: 'downtown', zone: 'commercial' };
+    }
+    // Remaining Promenade & Mid-Town Blocks: Residential & Retail (6 blocks = 18 plots)
     return { district: 'residential', zone: 'residential' };
   };
 
@@ -129,7 +133,7 @@ function generateCityPlots(): PlotBlueprint[] {
     for (const bx of blockCenters) {
       const { district, zone } = districtForBlock(bx, bz);
       const mult = DISTRICTS[district].landMultiplier;
-      // 3 interactive plots per block (total 48 plots)
+      // 3 interactive plots per block (total 108 plots)
       const offsets = [
         { dx: -7.5, dz: -7.5 },
         { dx: 7.5, dz: -7.5 },
@@ -139,7 +143,7 @@ function generateCityPlots(): PlotBlueprint[] {
         const basePrice = Math.round((15000 + ((idx * 3719) % 18000)) * mult / 500) * 500;
         plots.push({
           id: `plot_${idx}`,
-          code: `${district.slice(0, 2).toUpperCase()}-${String(idx).padStart(2, '0')}`,
+          code: `${district.slice(0, 2).toUpperCase()}-${String(idx).padStart(3, '0')}`,
           district,
           x: bx + off.dx,
           z: bz + off.dz,

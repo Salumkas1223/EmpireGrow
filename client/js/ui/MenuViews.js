@@ -35,7 +35,7 @@ export function renderMenuContent(menuId) {
               </div>
               <div class="grid grid-cols-2 gap-2.5">
                 <button data-action="open-menu" data-menu="plots" class="px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-left transition-colors cursor-pointer">
-                  ${t('nav.plots')} (${fin.plotsCount}/48)
+                  ${t('nav.plots')} (${fin.plotsCount}/${cat.plots.length})
                 </button>
                 <button data-action="open-menu" data-menu="companies" class="px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-left transition-colors cursor-pointer">
                   ${t('nav.companies')} (${st.companies.length})
@@ -142,7 +142,7 @@ export function renderMenuContent(menuId) {
       return `
         <div class="space-y-3">
           <div class="text-xs text-slate-400">
-            ${lang === 'de' ? 'Klicke ein Grundstück in der 3D-Stadt oder verwalte deine 48 Parzellen direkt hier.' : 'Click any plot in 3D or manage all 48 city parcels below.'}
+            ${lang === 'de' ? `Klicke ein Grundstück in der 3D-Stadt oder verwalte deine ${cat.plots.length} Parzellen direkt hier.` : `Click any plot in 3D or manage all ${cat.plots.length} city parcels below.`}
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             ${cat.plots
@@ -715,7 +715,7 @@ export function renderMenuContent(menuId) {
         <div class="space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             ${kpiCard(t('kpi.level'), `${st.player.level} (${st.player.xp} XP)`, 'text-sky-400')}
-            ${kpiCard(lang === 'de' ? 'Grundstücke' : 'Plots Owned', `${fin.plotsCount}/48`, 'text-white')}
+            ${kpiCard(lang === 'de' ? 'Grundstücke' : 'Plots Owned', `${fin.plotsCount}/${cat.plots.length}`, 'text-white')}
             ${kpiCard(lang === 'de' ? 'Forschungen' : 'Tech Unlocked', `${techCompleted.size}/${cat.technologies.length}`, 'text-indigo-400')}
             ${kpiCard(lang === 'de' ? 'Handelsvolumen' : 'Trades Executed', String(st.player.trades_count || 0), 'text-emerald-400')}
           </div>

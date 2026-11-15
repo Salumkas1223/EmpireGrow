@@ -1,44 +1,91 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PLOT_BLUEPRINTS, DISTRICTS } from '../../../config/gameConfig.ts';
 import { createBuildingModel } from './BuildingFactory.js';
+
+function createPlotBorderFrameGeometry(size = 12.0, barWidth = 0.22, height = 0.08) {
+  const half = size * 0.5 - barWidth * 0.5;
+  const parts = [
+    new THREE.BoxGeometry(size, height, barWidth).translate(0, 0, -half),
+    new THREE.BoxGeometry(size, height, barWidth).translate(0, 0, half),
+    new THREE.BoxGeometry(barWidth, height, size - barWidth * 2).translate(-half, 0, 0),
+    new THREE.BoxGeometry(barWidth, height, size - barWidth * 2).translate(half, 0, 0),
+  ];
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((p) => p.dispose());
+  return merged;
+}
 
 export class PlotSystem {
   constructor(scene, textures) {
     this.scene = scene;
     this.textures = textures;
     this.plotGroup = new THREE.Group();
-    this.hitMeshes = [];
     this.plotVisuals = new Map();
     this.buildingInstances = new Map();
     this.windowMaterials = [];
 
+    const count = PLOT_BLUEPRINTS.length;
     const padGeo = new THREE.BoxGeometry(11.8, 0.16, 11.8);
-    const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(12.0, 0.2, 12.0));
+    const padMat = new THREE.MeshStandardMaterial({
+      map: textures.plotPadMap || textures.stoneMap,
+      bumpMap: textures.plotPadBump || textures.sidewalkBump,
+      bumpScale: 0.03,
+      color: 0xffffff,
+      roughness: 0.86,
+      metalness: 0.04,
+    });
+    this.padsMesh = new THREE.InstancedMesh(padGeo, padMat, count);
+    this.padsMesh.receiveShadow = true;
+    this.padsMesh.layers.enable(1);
+    this.padsMesh.userData.plotIds = [];
 
-    for (const bp of PLOT_BLUEPRINTS) {
+    const borderGeo = createPlotBorderFrameGeometry(12.0, 0.20, 0.08);
+    const borderMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.88,
+    });
+    this.bordersMesh = new THREE.InstancedMesh(borderGeo, borderMat, count);
+
+    const dummy = new THREE.Object3D();
+    const tmpCol = new THREE.Color();
+
+    PLOT_BLUEPRINTS.forEach((bp, idx) => {
       const district = DISTRICTS[bp.district];
-      const padMat = new THREE.MeshStandardMaterial({
-        map: textures.stoneMap,
-        bumpMap: textures.sidewalkBump,
-        bumpScale: 0.02,
-        color: 0x334155,
-        roughness: 0.86,
-        metalness: 0.08,
+
+      dummy.position.set(bp.x, 0.16, bp.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      this.padsMesh.setMatrixAt(idx, dummy.matrix);
+
+      dummy.position.set(bp.x, 0.23, bp.z);
+      dummy.updateMatrix();
+      this.bordersMesh.setMatrixAt(idx, dummy.matrix);
+
+      tmpCol.setHex(0x88b878);
+      this.padsMesh.setColorAt(idx, tmpCol);
+      tmpCol.setHex(0x94a3b8);
+      this.bordersMesh.setColorAt(idx, tmpCol);
+
+      this.padsMesh.userData.plotIds.push(bp.id);
+      this.plotVisuals.set(bp.id, {
+        idx,
+        bp,
+        districtColor: district?.accentColor || '#38bdf8',
       });
-      const pad = new THREE.Mesh(padGeo, padMat);
-      pad.position.set(bp.x, 0.16, bp.z);
-      pad.receiveShadow = true;
-      pad.layers.enable(1);
-      pad.userData.plotId = bp.id;
+    });
 
-      const borderMat = new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.55 });
-      const border = new THREE.LineSegments(borderGeo, borderMat);
-      border.position.set(bp.x, 0.22, bp.z);
+    this.padsMesh.instanceMatrix.needsUpdate = true;
+    this.padsMesh.instanceColor.needsUpdate = true;
+    this.padsMesh.computeBoundingSphere();
+    this.bordersMesh.instanceMatrix.needsUpdate = true;
+    this.bordersMesh.instanceColor.needsUpdate = true;
+    this.bordersMesh.computeBoundingSphere();
 
-      this.plotGroup.add(pad, border);
-      this.hitMeshes.push(pad);
-      this.plotVisuals.set(bp.id, { bp, pad, padMat, border, borderMat, districtColor: district?.accentColor || '#38bdf8' });
-    }
+    this.plotGroup.add(this.padsMesh, this.bordersMesh);
+    this.hitMeshes = [this.padsMesh];
 
     // Selection highlight ring
     this.selectionRing = new THREE.Mesh(
@@ -52,38 +99,41 @@ export class PlotSystem {
     this.plotGroup.add(this.selectionRing);
 
     scene.add(this.plotGroup);
+    this._padColor = new THREE.Color();
+    this._borderColor = new THREE.Color();
   }
 
   syncState(ownedPlotIds, buildings, selectedPlotId, hoveredPlotId) {
     const ownedSet = new Set(ownedPlotIds || []);
     const bldByPlot = new Map((buildings || []).map((b) => [b.plot_id, b]));
 
-    // Update plot colors & selection ring
+    // Batch-update all 108 plot pad & border colors inside 2 instanced attributes
     for (const [plotId, vis] of this.plotVisuals.entries()) {
       const isOwned = ownedSet.has(plotId);
       const isHovered = plotId === hoveredPlotId;
       const isSelected = plotId === selectedPlotId;
 
       if (isSelected) {
-        vis.borderMat.color.setHex(0x38bdf8);
-        vis.borderMat.opacity = 1.0;
-        vis.padMat.color.setHex(isOwned ? 0x164e63 : 0x1e3a5f);
+        this._borderColor.setHex(0x38bdf8);
+        this._padColor.setHex(isOwned ? 0x1a5b75 : 0x2a6982);
         this.selectionRing.position.set(vis.bp.x, 0.3, vis.bp.z);
         this.selectionRing.visible = true;
       } else if (isHovered) {
-        vis.borderMat.color.setHex(0x7dd3fc);
-        vis.borderMat.opacity = 0.9;
-        vis.padMat.color.setHex(isOwned ? 0x1e3a4c : 0x263449);
+        this._borderColor.setHex(0x7dd3fc);
+        this._padColor.setHex(isOwned ? 0x214e66 : 0x5f9d78);
       } else if (isOwned) {
-        vis.borderMat.color.set(vis.districtColor);
-        vis.borderMat.opacity = 0.85;
-        vis.padMat.color.setHex(0x162436);
+        this._borderColor.set(vis.districtColor);
+        this._padColor.setHex(0x1d3f54);
       } else {
-        vis.borderMat.color.setHex(0x475569);
-        vis.borderMat.opacity = 0.45;
-        vis.padMat.color.setHex(0x1b2432);
+        this._borderColor.setHex(0x8a99ad);
+        this._padColor.setHex(0x88b878);
       }
+
+      this.padsMesh.setColorAt(vis.idx, this._padColor);
+      this.bordersMesh.setColorAt(vis.idx, this._borderColor);
     }
+    this.padsMesh.instanceColor.needsUpdate = true;
+    this.bordersMesh.instanceColor.needsUpdate = true;
 
     if (!selectedPlotId) {
       this.selectionRing.visible = false;
@@ -106,6 +156,7 @@ export class PlotSystem {
 
     // Spawn new or updated buildings
     const smokePositions = [];
+    const constructionSites = [];
     for (const b of buildings || []) {
       const vis = this.plotVisuals.get(b.plot_id);
       if (!vis) continue;
@@ -121,7 +172,9 @@ export class PlotSystem {
         this.buildingInstances.set(b.plot_id, inst);
       }
 
-      if (b.is_constructing === 0 && inst.model.smokeEmitters.length > 0) {
+      if (b.is_constructing === 1) {
+        constructionSites.push({ x: vis.bp.x, y: 1.6, z: vis.bp.z });
+      } else if (inst.model.smokeEmitters.length > 0) {
         for (const localPos of inst.model.smokeEmitters) {
           const worldPos = localPos.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), inst.model.group.rotation.y);
           worldPos.add(inst.model.group.position);
@@ -137,7 +190,7 @@ export class PlotSystem {
       }
     }
 
-    return smokePositions;
+    return { smokePositions, constructionSites };
   }
 
   update(dt) {

@@ -6,6 +6,13 @@ const _wheelDummy = new THREE.Object3D();
 const _color = new THREE.Color();
 const _planeNext = new THREE.Vector3();
 const _planeDir = new THREE.Vector3();
+const _matA = new THREE.Matrix4();
+const _matB = new THREE.Matrix4();
+const _matC = new THREE.Matrix4();
+const _euler = new THREE.Euler();
+const _quat = new THREE.Quaternion();
+const _vecA = new THREE.Vector3();
+const _scaleOne = new THREE.Vector3(1, 1, 1);
 
 function mergeParts(parts, keepUv = false) {
   const cleaned = parts.map((g) => {
@@ -1002,12 +1009,145 @@ function createRealisticAirliner() {
   return { plane, planeBeacon };
 }
 
+/**
+ * Anatomically proportioned articulated human pedestrian meshes:
+ * - Sculpted Lathe torso (pelvis -> waist -> chest -> shoulders + collar)
+ * - Neck + oval cranium + subtle jawline/nose profile + sculpted hair cap
+ * - Curved slightly-bent arms + bare hands
+ * - Articulated thighs pivoting at hip + anatomical calves + sculpted shoes pivoting at knee
+ */
+function createRealisticHumanGeometries() {
+  // 1. Sculpted Torso (y = 0 at hip/pelvis line up to y = 0.56 at collarbone)
+  const torsoPts = [
+    new THREE.Vector2(0.01, 0.00),
+    new THREE.Vector2(0.125, 0.02), // hips
+    new THREE.Vector2(0.118, 0.12), // lower waist
+    new THREE.Vector2(0.112, 0.22), // natural waist taper
+    new THREE.Vector2(0.138, 0.36), // ribcage / chest
+    new THREE.Vector2(0.152, 0.46), // upper chest / shoulders
+    new THREE.Vector2(0.122, 0.52), // trapezius slope
+    new THREE.Vector2(0.056, 0.55), // collar opening
+    new THREE.Vector2(0.01, 0.555),
+  ];
+  const torsoGeo = new THREE.LatheGeometry(torsoPts, 16);
+  torsoGeo.scale(1.24, 1.0, 0.76); // anatomical broad shoulders, slimmer chest depth
+  torsoGeo.computeVertexNormals();
+
+  // 2. Sculpted Neck + Oval Human Head with subtle Chin/Nose contour (origin at base of neck y=0)
+  const headPts = [
+    new THREE.Vector2(0.048, -0.02), // neck base
+    new THREE.Vector2(0.044, 0.04),  // upper neck
+    new THREE.Vector2(0.078, 0.08),  // jaw / chin line
+    new THREE.Vector2(0.092, 0.14),  // cheekbones
+    new THREE.Vector2(0.095, 0.19),  // brow / temples
+    new THREE.Vector2(0.082, 0.24),  // upper cranium
+    new THREE.Vector2(0.045, 0.268), // crown
+    new THREE.Vector2(0.005, 0.276),
+  ];
+  const headGeo = new THREE.LatheGeometry(headPts, 16);
+  headGeo.scale(0.88, 1.0, 1.02);
+  // Subtle facial forward protrusion for nose bridge & chin
+  const hPos = headGeo.attributes.position;
+  for (let i = 0; i < hPos.count; i++) {
+    const x = hPos.getX(i);
+    const y = hPos.getY(i);
+    const z = hPos.getZ(i);
+    if (z > 0.05 && Math.abs(x) < 0.032 && y > 0.115 && y < 0.175) {
+      hPos.setZ(i, z + 0.020 * (1.0 - Math.abs(x) / 0.032));
+    }
+    if (z > 0.03 && Math.abs(x) < 0.045 && y >= 0.07 && y <= 0.105) {
+      hPos.setZ(i, z + 0.012);
+    }
+  }
+  headGeo.computeVertexNormals();
+
+  // 3. Sculpted Hair Cap (covers top, crown, sides behind ears & nape of neck, open at face +Z)
+  const hairTop = new THREE.SphereGeometry(0.103, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56);
+  hairTop.scale(0.92, 0.98, 1.06);
+  hairTop.rotateX(-0.24); // tilts forward slightly at brow, deeper at nape
+  hairTop.translate(0, 0.175, -0.012);
+
+  const hairBack = new THREE.CylinderGeometry(0.096, 0.082, 0.125, 12, 1, false, Math.PI * 0.55, Math.PI * 0.90);
+  hairBack.scale(0.92, 1.0, 1.02);
+  hairBack.translate(0, 0.125, -0.014);
+  const hairGeo = mergeParts([hairTop, hairBack]);
+
+  // 4. Sculpted Curved Arm (Shoulder pivot at 0,0,0 -> slightly bent elbow -> forearm cuff at y = -0.47)
+  const armCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.0, 0),
+    new THREE.Vector3(0, -0.14, -0.008),
+    new THREE.Vector3(0, -0.26, -0.012), // elbow
+    new THREE.Vector3(0, -0.38, 0.028),  // forearm angled slightly forward
+    new THREE.Vector3(0, -0.47, 0.068),  // wrist
+  ]);
+  const armGeo = new THREE.TubeGeometry(armCurve, 10, 0.044, 9, false);
+  // Subtle shoulder cap & taper toward wrist
+  const aPos = armGeo.attributes.position;
+  for (let i = 0; i < aPos.count; i++) {
+    const y = aPos.getY(i);
+    const t = Math.max(0, Math.min(1, -y / 0.47));
+    const taper = 1.08 - t * 0.34;
+    aPos.setX(i, aPos.getX(i) * taper);
+  }
+  const shoulderCap = new THREE.SphereGeometry(0.052, 8, 8);
+  const fullArmGeo = mergeParts([armGeo, shoulderCap]);
+
+  // 5. Bare Hand anchored at wrist end (0, -0.50, 0.08) in same shoulder pivot frame
+  const handGeo = new THREE.SphereGeometry(0.038, 8, 8);
+  handGeo.scale(0.68, 1.35, 0.95);
+  handGeo.rotateX(0.35);
+  handGeo.translate(0, -0.505, 0.082);
+
+  // 6. Articulated Thigh (Hip pivot at y=0 down to Knee joint at y=-0.39)
+  const thighPts = [
+    new THREE.Vector2(0.056, -0.40), // knee overlap
+    new THREE.Vector2(0.062, -0.34),
+    new THREE.Vector2(0.072, -0.20),
+    new THREE.Vector2(0.082, -0.06),
+    new THREE.Vector2(0.076, 0.01),
+    new THREE.Vector2(0.01, 0.03),
+  ];
+  const thighGeo = new THREE.LatheGeometry(thighPts, 12);
+  thighGeo.scale(0.95, 1.0, 1.05);
+  thighGeo.computeVertexNormals();
+
+  // 7. Articulated Shin/Calf (Knee pivot at y=0 down to Ankle at y=-0.37)
+  const shinPts = [
+    new THREE.Vector2(0.040, -0.38), // ankle
+    new THREE.Vector2(0.048, -0.26),
+    new THREE.Vector2(0.062, -0.14), // natural calf muscle curve
+    new THREE.Vector2(0.058, -0.04),
+    new THREE.Vector2(0.056, 0.02),  // rounded knee overlap
+    new THREE.Vector2(0.005, 0.03),
+  ];
+  const shinGeo = new THREE.LatheGeometry(shinPts, 12);
+  shinGeo.computeVertexNormals();
+
+  // 8. Sculpted Human Shoe (anchored in Knee frame at y = -0.44 sole to y = -0.36 collar)
+  const shoeGeo = extrudeSilhouetteX(
+    (s) => {
+      s.moveTo(-0.055, -0.445); // flat heel bottom
+      s.lineTo(0.155, -0.445);  // flat sole to toe
+      s.quadraticCurveTo(0.182, -0.440, 0.176, -0.410); // rounded toe bumper
+      s.quadraticCurveTo(0.130, -0.388, 0.068, -0.372); // instep lace slope
+      s.lineTo(0.036, -0.362);  // ankle collar front
+      s.lineTo(-0.048, -0.362); // ankle collar back
+      s.lineTo(-0.058, -0.425); // heel counter
+      s.closePath();
+    },
+    0.078,
+    { thickness: 0.012, size: 0.010, segments: 2, curveSegments: 8 }
+  );
+
+  return { torsoGeo, headGeo, hairGeo, armGeo: fullArmGeo, handGeo, thighGeo, shinGeo, shoeGeo };
+}
+
 export class TrafficSystem {
   constructor(scene, terrainRefs, textures) {
     this.scene = scene;
     this.terrainRefs = terrainRefs;
-    const roadLines = [-80, -40, 0, 40, 80];
-    this.signalIntersections = [-40, 0, 40];
+    const roadLines = [-120, -80, -40, 0, 40, 80, 120];
+    this.signalIntersections = [-80, -40, 0, 40, 80];
 
     const carPaintMat = new THREE.MeshPhysicalMaterial({
       metalness: 0.84,
@@ -1056,8 +1196,8 @@ export class TrafficSystem {
       depthWrite: false,
     });
 
-    // 1. Executive Sedans (24)
-    this.sedanCount = 24;
+    // 1. Executive Sedans (28)
+    this.sedanCount = 28;
     const sedan = createSedanGeometries();
     const sedanWheel = createAlloyWheelGeometries(0.30, 0.24);
     this.sedanBodyMesh = new THREE.InstancedMesh(sedan.bodyGeo, carPaintMat, this.sedanCount);
@@ -1068,8 +1208,8 @@ export class TrafficSystem {
     this.sedanWheelMesh = new THREE.InstancedMesh(sedanWheel.tireGeo, tireMat, this.sedanCount * 4);
     this.sedanRimMesh = new THREE.InstancedMesh(sedanWheel.rimGeo, chromeMat, this.sedanCount * 4);
 
-    // 2. Sport GT Coupes (12)
-    this.coupeCount = 12;
+    // 2. Sport GT Coupes (14)
+    this.coupeCount = 14;
     const coupe = createCoupeGeometries();
     const coupeWheel = createAlloyWheelGeometries(0.29, 0.25);
     this.coupeBodyMesh = new THREE.InstancedMesh(coupe.bodyGeo, coupePaintMat, this.coupeCount);
@@ -1080,8 +1220,8 @@ export class TrafficSystem {
     this.coupeWheelMesh = new THREE.InstancedMesh(coupeWheel.tireGeo, tireMat, this.coupeCount * 4);
     this.coupeRimMesh = new THREE.InstancedMesh(coupeWheel.rimGeo, chromeMat, this.coupeCount * 4);
 
-    // 3. Modern Executive SUVs (18)
-    this.suvCount = 18;
+    // 3. Modern Executive SUVs (22)
+    this.suvCount = 22;
     const suv = createSuvGeometries();
     const suvWheel = createAlloyWheelGeometries(0.35, 0.27);
     this.suvBodyMesh = new THREE.InstancedMesh(suv.bodyGeo, suvPaintMat, this.suvCount);
@@ -1092,8 +1232,8 @@ export class TrafficSystem {
     this.suvWheelMesh = new THREE.InstancedMesh(suvWheel.tireGeo, tireMat, this.suvCount * 4);
     this.suvRimMesh = new THREE.InstancedMesh(suvWheel.rimGeo, chromeMat, this.suvCount * 4);
 
-    // 4. Sculpted Long-Nose Semi-Trucks (14)
-    this.truckCount = 14;
+    // 4. Sculpted Long-Nose Semi-Trucks (16)
+    this.truckCount = 16;
     const truck = createTruckGeometries();
     const truckWheelGeo = createAlloyWheelGeometries(0.40, 0.30);
     const truckCabMat = new THREE.MeshPhysicalMaterial({ metalness: 0.78, roughness: 0.20, clearcoat: 0.90 });
@@ -1164,7 +1304,7 @@ export class TrafficSystem {
         localIdx = i - this.sedanCount - this.coupeCount - this.suvCount;
       }
 
-      const laneIdx = i % 10;
+      const laneIdx = i % (roadLines.length * 2);
       const axis = laneIdx % 2 === 0 ? 'z' : 'x';
       const roadCoord = roadLines[(Math.floor(i / 2)) % roadLines.length];
       const dir = (i % 4 < 2) ? 1 : -1;
@@ -1181,7 +1321,7 @@ export class TrafficSystem {
         roadCoord,
         dir,
         laneOffset: dir * 1.78,
-        pos: -92 + ((i * 23) % 184),
+        pos: -130 + ((i * 23) % 260),
         maxSpeed,
         curSpeed: maxSpeed,
         wheelSpin: i * 0.7,
@@ -1219,19 +1359,56 @@ export class TrafficSystem {
     this.truckCabMesh.instanceColor.needsUpdate = true;
     this.truckTailMesh.instanceColor.needsUpdate = true;
 
-    // 5. Articulated Striding Pedestrians
-    this.pedCount = 72;
-    this.pedTorsoMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.32, 0.56, 0.20), new THREE.MeshStandardMaterial({ roughness: 0.76 }), this.pedCount);
-    this.pedHeadMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.125, 8, 8), new THREE.MeshStandardMaterial({ color: 0xe2b69a, roughness: 0.7 }), this.pedCount);
-    const legGeo = new THREE.BoxGeometry(0.12, 0.48, 0.13);
-    legGeo.translate(0, -0.24, 0);
-    const pantMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 });
-    this.pedLegLMesh = new THREE.InstancedMesh(legGeo, pantMat, this.pedCount);
-    this.pedLegRMesh = new THREE.InstancedMesh(legGeo, pantMat, this.pedCount);
-    [this.pedTorsoMesh, this.pedHeadMesh, this.pedLegLMesh, this.pedLegRMesh].forEach((m) => {
+    // 5. Realistic Articulated Multi-Part Pedestrians (8 batched InstancedMeshes for 96 humans)
+    this.pedCount = 96;
+    const humanGeo = createRealisticHumanGeometries();
+    const clothMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.04 });
+    const skinMat = new THREE.MeshStandardMaterial({ roughness: 0.66, metalness: 0.02 });
+    const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0.08 });
+    const pantsMat = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0.04 });
+    const shoeMat = new THREE.MeshStandardMaterial({ roughness: 0.56, metalness: 0.14 });
+    const pedShadowMat = new THREE.MeshBasicMaterial({
+      map: textures?.contactShadow || null,
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.48,
+      depthWrite: false,
+    });
+
+    this.pedTorsoMesh = new THREE.InstancedMesh(humanGeo.torsoGeo, clothMat, this.pedCount);
+    this.pedHeadMesh = new THREE.InstancedMesh(humanGeo.headGeo, skinMat, this.pedCount);
+    this.pedHairMesh = new THREE.InstancedMesh(humanGeo.hairGeo, hairMat, this.pedCount);
+    this.pedArmMesh = new THREE.InstancedMesh(humanGeo.armGeo, clothMat, this.pedCount * 2);
+    this.pedHandMesh = new THREE.InstancedMesh(humanGeo.handGeo, skinMat, this.pedCount * 2);
+    this.pedThighMesh = new THREE.InstancedMesh(humanGeo.thighGeo, pantsMat, this.pedCount * 2);
+    this.pedShinMesh = new THREE.InstancedMesh(humanGeo.shinGeo, pantsMat, this.pedCount * 2);
+    this.pedShoeMesh = new THREE.InstancedMesh(humanGeo.shoeGeo, shoeMat, this.pedCount * 2);
+
+    const pedShadowGeo = new THREE.PlaneGeometry(0.68, 0.68);
+    pedShadowGeo.rotateX(-Math.PI / 2);
+    this.pedShadowMesh = new THREE.InstancedMesh(pedShadowGeo, pedShadowMat, this.pedCount);
+
+    [
+      this.pedTorsoMesh,
+      this.pedHeadMesh,
+      this.pedHairMesh,
+      this.pedArmMesh,
+      this.pedHandMesh,
+      this.pedThighMesh,
+      this.pedShinMesh,
+      this.pedShoeMesh,
+      this.pedShadowMesh,
+    ].forEach((m) => {
       m.frustumCulled = false;
+      if (m !== this.pedShadowMesh) m.castShadow = true;
       scene.add(m);
     });
+
+    const skinTones = [0xf5d0b5, 0xebc09e, 0xd9a27b, 0xbd835b, 0x8d5534, 0x5c3824];
+    const hairTones = [0x141210, 0x2c1d13, 0x4e3222, 0x6f4628, 0xa87d43, 0x9ca3af, 0x7c2d12];
+    const topColors = [0x1e3a5f, 0x334155, 0x7f1d1d, 0x064e3b, 0xe2e8f0, 0xb45309, 0x312e81, 0x475569, 0x0f766e, 0x78350f];
+    const pantColors = [0x0f172a, 0x1e293b, 0x1d3557, 0x4b5563, 0x786852, 0x27272a];
+    const shoeColors = [0x111827, 0x3b2416, 0xe2e8f0, 0x1e293b, 0x451a03];
 
     this.peds = [];
     for (let i = 0; i < this.pedCount; i++) {
@@ -1239,29 +1416,61 @@ export class TrafficSystem {
       const roadCoord = roadLines[(i * 3) % roadLines.length];
       const side = (i % 4 < 2 ? 1 : -1) * 4.65;
       const dir = i % 3 === 0 ? 1 : -1;
+      const heightScale = 0.94 + ((i * 13) % 15) * 0.01;
+      const buildScale = 0.92 + ((i * 7) % 13) * 0.015;
       this.peds.push({
         axis,
         roadCoord,
         side,
         dir,
-        pos: -85 + ((i * 19) % 170),
-        speed: 1.55 + (i % 4) * 0.28,
+        pos: -126 + ((i * 19) % 252),
+        speed: 1.48 + (i % 4) * 0.25,
         phase: i * 0.9,
+        heightScale,
+        buildScale,
       });
-      _color.setHSL((i * 0.14) % 1, 0.44, 0.40);
+
+      _color.setHex(topColors[i % topColors.length]);
       this.pedTorsoMesh.setColorAt(i, _color);
+      this.pedArmMesh.setColorAt(i * 2, _color);
+      this.pedArmMesh.setColorAt(i * 2 + 1, _color);
+
+      _color.setHex(skinTones[(i * 3) % skinTones.length]);
+      this.pedHeadMesh.setColorAt(i, _color);
+      this.pedHandMesh.setColorAt(i * 2, _color);
+      this.pedHandMesh.setColorAt(i * 2 + 1, _color);
+
+      _color.setHex(hairTones[(i * 5) % hairTones.length]);
+      this.pedHairMesh.setColorAt(i, _color);
+
+      _color.setHex(pantColors[(i * 7) % pantColors.length]);
+      this.pedThighMesh.setColorAt(i * 2, _color);
+      this.pedThighMesh.setColorAt(i * 2 + 1, _color);
+      this.pedShinMesh.setColorAt(i * 2, _color);
+      this.pedShinMesh.setColorAt(i * 2 + 1, _color);
+
+      _color.setHex(shoeColors[(i * 11) % shoeColors.length]);
+      this.pedShoeMesh.setColorAt(i * 2, _color);
+      this.pedShoeMesh.setColorAt(i * 2 + 1, _color);
     }
     this.pedTorsoMesh.instanceColor.needsUpdate = true;
+    this.pedArmMesh.instanceColor.needsUpdate = true;
+    this.pedHeadMesh.instanceColor.needsUpdate = true;
+    this.pedHandMesh.instanceColor.needsUpdate = true;
+    this.pedHairMesh.instanceColor.needsUpdate = true;
+    this.pedThighMesh.instanceColor.needsUpdate = true;
+    this.pedShinMesh.instanceColor.needsUpdate = true;
+    this.pedShoeMesh.instanceColor.needsUpdate = true;
 
     // 6. Ocean Container Ship + Harbor Tugboat
     const shipBuilt = createRealisticContainerShip();
     this.ship = shipBuilt.ship;
     this.shipRadar = shipBuilt.shipRadar;
-    this.ship.position.set(-55, -0.45, 136);
+    this.ship.position.set(-75, -0.45, 178);
     scene.add(this.ship);
 
     this.tug = createHarborTugboat();
-    this.tug.position.set(-40, -0.45, 123);
+    this.tug.position.set(-60, -0.45, 163);
     scene.add(this.tug);
 
     // 7. Commercial Jetliner flying coastal approach circuit over the runway
@@ -1271,25 +1480,37 @@ export class TrafficSystem {
     scene.add(this.plane);
 
     this.elapsed = 0;
+    this.shipVelSign = 1;
+    this.tugVelSign = 1;
+    this.effectEmitters = {
+      shipPos: new THREE.Vector3(),
+      shipDir: 1,
+      shipFunnel: new THREE.Vector3(),
+      tugPos: new THREE.Vector3(),
+      tugDir: 1,
+      planeEngineL: new THREE.Vector3(),
+      planeEngineR: new THREE.Vector3(),
+      movingCars: [],
+    };
   }
 
   _planePositionAt(t, out) {
-    const angle = (t * 0.048) * Math.PI * 2;
-    const cx = 74;
+    const angle = (t * 0.044) * Math.PI * 2;
+    const cx = 104;
     const cz = -10;
     const rx = 56;
-    const rz = 94;
+    const rz = 126;
     const x = cx + Math.sin(angle) * rx;
     const z = cz + Math.cos(angle) * rz;
-    // Lower smoothly when aligned on coastal runway side (x > 105), climb gracefully out to sea/city
+    // Lower smoothly when aligned on coastal runway side (x > 140), climb gracefully out to sea/city
     const runwayDip = Math.max(0, Math.sin(angle));
-    const y = 34 - runwayDip * 20 + Math.sin(angle * 2) * 3.5;
+    const y = 38 - runwayDip * 23 + Math.sin(angle * 2) * 3.5;
     return out.set(x, y, z);
   }
 
   _shouldStop(v, vIdx, nsGreen, ewGreen) {
     const isGreen = v.axis === 'z' ? nsGreen : ewGreen;
-    if (!isGreen && Math.abs(v.roadCoord) <= 45) {
+    if (!isGreen && Math.abs(v.roadCoord) <= 85) {
       for (const inter of this.signalIntersections) {
         const distAhead = (inter - v.pos) * v.dir;
         if (distAhead > 4.6 && distAhead < 10.2) return true;
@@ -1302,7 +1523,7 @@ export class TrafficSystem {
       const other = this.vehicles[j];
       if (other.axis !== v.axis || other.roadCoord !== v.roadCoord || other.dir !== v.dir) continue;
       let delta = (other.pos - v.pos) * v.dir;
-      if (delta < -160) delta += 184;
+      if (delta < -230) delta += 268;
       if (delta > 0 && delta < minGap) return true;
     }
     return false;
@@ -1344,8 +1565,8 @@ export class TrafficSystem {
       v.braking = stop || (v.curSpeed < prevSpeed - 0.05) || v.curSpeed < 1.0;
 
       v.pos += v.dir * v.curSpeed * dt;
-      if (v.pos > 96) v.pos = -96;
-      if (v.pos < -96) v.pos = 96;
+      if (v.pos > 134) v.pos = -134;
+      if (v.pos < -134) v.pos = 134;
 
       const wheelRadius = v.kind === 'coupe' ? 0.29 : v.kind === 'sedan' ? 0.30 : v.kind === 'suv' ? 0.35 : 0.40;
       v.wheelSpin += (v.curSpeed * dt) / wheelRadius;
@@ -1482,58 +1703,109 @@ export class TrafficSystem {
     for (let i = 0; i < this.pedCount; i++) {
       const p = this.peds[i];
       p.pos += p.dir * p.speed * dt;
-      if (p.pos > 92) p.pos = -92;
-      if (p.pos < -92) p.pos = 92;
+      if (p.pos > 130) p.pos = -130;
+      if (p.pos < -130) p.pos = 130;
 
-      const stride = Math.sin(this.elapsed * 7.2 + p.phase);
-      const bob = Math.abs(stride) * 0.04;
+      const gaitPhase = this.elapsed * (p.speed * 3.8) + p.phase;
+      const stride = Math.sin(gaitPhase);
+      const bob = Math.abs(Math.cos(gaitPhase)) * 0.032 * p.heightScale;
       const px = p.axis === 'z' ? p.roadCoord + p.side : p.pos;
       const pz = p.axis === 'z' ? p.pos : p.roadCoord + p.side;
       const rotY = p.axis === 'z' ? (p.dir > 0 ? 0 : Math.PI) : (p.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
-      const cR = Math.cos(rotY);
-      const sR = Math.sin(rotY);
 
-      _dummy.position.set(px, 0.78 + bob, pz);
-      _dummy.rotation.set(0, rotY, 0);
-      _dummy.scale.set(1, 1, 1);
+      // Soft contact shadow grounded flush on sidewalk top (y = 0.135)
+      _dummy.position.set(px, 0.136, pz);
+      _dummy.rotation.set(0, 0, 0);
+      _dummy.scale.set(p.buildScale, 1, p.buildScale);
       _dummy.updateMatrix();
-      this.pedTorsoMesh.setMatrixAt(i, _dummy.matrix);
+      this.pedShadowMesh.setMatrixAt(i, _dummy.matrix);
 
-      _dummy.position.set(px, 1.18 + bob, pz);
-      _dummy.updateMatrix();
-      this.pedHeadMesh.setMatrixAt(i, _dummy.matrix);
+      // Hip/Pelvis base matrix with natural stride bob & slight pelvic twist
+      const hipY = 0.132 + 0.802 * p.heightScale + bob * 0.45;
+      _euler.set(0.04, rotY + stride * 0.055, 0, 'YXZ');
+      _quat.setFromEuler(_euler);
+      _vecA.set(p.buildScale, p.heightScale, p.buildScale);
+      _matA.compose(_dummy.position.set(px, hipY, pz), _quat, _vecA);
+      this.pedTorsoMesh.setMatrixAt(i, _matA);
 
-      _dummy.position.set(px - 0.09 * cR, 0.50 + bob, pz + 0.09 * sR);
-      _dummy.rotation.set(0, rotY, 0);
-      _dummy.rotateX(stride * 0.55);
-      _dummy.updateMatrix();
-      this.pedLegLMesh.setMatrixAt(i, _dummy.matrix);
+      // Neck & Head + Hair mounted at top of torso (local y = 0.545) with subtle head counter-balance
+      _euler.set(-0.04, -stride * 0.045, 0, 'YXZ');
+      _quat.setFromEuler(_euler);
+      _matB.compose(_dummy.position.set(0, 0.545, 0.012), _quat, _scaleOne);
+      _matC.multiplyMatrices(_matA, _matB);
+      this.pedHeadMesh.setMatrixAt(i, _matC);
+      this.pedHairMesh.setMatrixAt(i, _matC);
 
-      _dummy.position.set(px + 0.09 * cR, 0.50 + bob, pz - 0.09 * sR);
-      _dummy.rotation.set(0, rotY, 0);
-      _dummy.rotateX(-stride * 0.55);
-      _dummy.updateMatrix();
-      this.pedLegRMesh.setMatrixAt(i, _dummy.matrix);
+      // Left & Right Arms + Hands (natural opposite counter-swing from shoulders at ±0.215, 0.475, 0)
+      for (let sideIdx = 0; sideIdx < 2; sideIdx++) {
+        const sgn = sideIdx === 0 ? -1 : 1;
+        const armSwing = (sideIdx === 0 ? stride : -stride) * 0.46;
+        _euler.set(armSwing, 0, sgn * 0.08, 'XYZ');
+        _quat.setFromEuler(_euler);
+        _matB.compose(_dummy.position.set(sgn * 0.215, 0.475, 0), _quat, _scaleOne);
+        _matC.multiplyMatrices(_matA, _matB);
+        this.pedArmMesh.setMatrixAt(i * 2 + sideIdx, _matC);
+        this.pedHandMesh.setMatrixAt(i * 2 + sideIdx, _matC);
+      }
+
+      // Left & Right Articulated Legs: Hip Thigh Swing + Authentic Asymmetric Knee Flexion + Shoes
+      for (let legIdx = 0; legIdx < 2; legIdx++) {
+        const sgn = legIdx === 0 ? -1 : 1;
+        const legPhase = legIdx === 0 ? gaitPhase : gaitPhase + Math.PI;
+        // Hip swings negative X = forward leg lift in Three.js (+Z forward!)
+        const hipPitch = -Math.sin(legPhase) * 0.46;
+        // Real human knee bends backward (+X rotation) during swing-through & relaxes on stance
+        const kneeBend = Math.max(0.04, Math.sin(legPhase - 0.55) * 0.68);
+
+        _euler.set(hipPitch, 0, 0, 'XYZ');
+        _quat.setFromEuler(_euler);
+        _matB.compose(_dummy.position.set(sgn * 0.095, 0.02, 0), _quat, _scaleOne);
+        // _matC = Thigh world matrix
+        _matC.multiplyMatrices(_matA, _matB);
+        this.pedThighMesh.setMatrixAt(i * 2 + legIdx, _matC);
+
+        // Knee joint sits at thigh local (0, -0.39, 0)
+        _euler.set(kneeBend, 0, 0, 'XYZ');
+        _quat.setFromEuler(_euler);
+        _matB.compose(_dummy.position.set(0, -0.39, 0), _quat, _scaleOne);
+        _matC.multiply(_matB);
+        this.pedShinMesh.setMatrixAt(i * 2 + legIdx, _matC);
+        this.pedShoeMesh.setMatrixAt(i * 2 + legIdx, _matC);
+      }
     }
     this.pedTorsoMesh.instanceMatrix.needsUpdate = true;
     this.pedHeadMesh.instanceMatrix.needsUpdate = true;
-    this.pedLegLMesh.instanceMatrix.needsUpdate = true;
-    this.pedLegRMesh.instanceMatrix.needsUpdate = true;
+    this.pedHairMesh.instanceMatrix.needsUpdate = true;
+    this.pedArmMesh.instanceMatrix.needsUpdate = true;
+    this.pedHandMesh.instanceMatrix.needsUpdate = true;
+    this.pedThighMesh.instanceMatrix.needsUpdate = true;
+    this.pedShinMesh.instanceMatrix.needsUpdate = true;
+    this.pedShoeMesh.instanceMatrix.needsUpdate = true;
+    this.pedShadowMesh.instanceMatrix.needsUpdate = true;
 
-    // Ocean Container Ship + Harbor Tugboat cruising smoothly along harbor channel
+    // Ocean Container Ship + Harbor Tugboat cruising smoothly along harbor channel at realistic waterline draft
     const shipVx = Math.cos(this.elapsed * 0.055);
-    this.ship.position.x = -55 + Math.sin(this.elapsed * 0.055) * 48;
-    this.ship.position.y = -0.45 + Math.sin(this.elapsed * 1.35) * 0.09;
-    this.ship.rotation.z = Math.sin(this.elapsed * 0.9) * 0.012;
-    this.ship.rotation.y = shipVx >= 0 ? 0 : Math.PI;
+    this.shipVelSign = shipVx >= 0 ? 1 : -1;
+    const sx = -75 + Math.sin(this.elapsed * 0.055) * 62;
+    const shipWave = Math.sin((0.32 * sx + 0.95 * 178) * 0.085 + this.elapsed * 1.45) * 0.11;
+    this.ship.position.x = sx;
+    this.ship.position.y = -1.30 + shipWave;
+    this.ship.rotation.z = Math.sin(this.elapsed * 0.95) * 0.014;
+    this.ship.rotation.x = Math.cos(this.elapsed * 1.25) * 0.008;
+    this.ship.rotation.y = this.shipVelSign > 0 ? 0 : Math.PI;
     this.shipRadar.rotation.y = this.elapsed * 2.8;
 
     const tugVx = -Math.sin(this.elapsed * 0.14);
-    this.tug.position.x = -52 + Math.cos(this.elapsed * 0.14) * 38;
-    this.tug.position.z = 123 + Math.sin(this.elapsed * 0.14) * 2.5;
-    this.tug.position.y = -0.42 + Math.sin(this.elapsed * 2.2) * 0.07;
-    this.tug.rotation.y = tugVx >= 0 ? 0 : Math.PI;
+    this.tugVelSign = tugVx >= 0 ? 1 : -1;
+    const tx = -72 + Math.cos(this.elapsed * 0.14) * 52;
+    const tz = 164 + Math.sin(this.elapsed * 0.14) * 2.5;
+    const tugWave = Math.sin((0.32 * tx + 0.95 * tz) * 0.085 + this.elapsed * 1.45) * 0.09;
+    this.tug.position.x = tx;
+    this.tug.position.z = tz;
+    this.tug.position.y = -0.54 + tugWave;
+    this.tug.rotation.y = this.tugVelSign > 0 ? 0 : Math.PI;
     this.tug.rotation.x = Math.sin(this.elapsed * 2.0) * 0.025;
+    this.tug.rotation.z = Math.cos(this.elapsed * 1.7) * 0.018;
 
     // Commercial Jetliner aligned strictly with forward flight tangent + coordinated bank
     this._planePositionAt(this.elapsed, this.plane.position);
@@ -1542,5 +1814,31 @@ export class TrafficSystem {
     this.plane.lookAt(_planeNext);
     this.plane.rotateZ(-0.26); // Coordinated left-wing bank around oval track
     this.planeBeacon.visible = Math.sin(this.elapsed * 7.5) > 0.35;
+
+    // Update dynamic effect emitter anchors
+    this.plane.updateMatrixWorld();
+    this.effectEmitters.planeEngineL.set(-2.5, -0.58, -0.6).applyMatrix4(this.plane.matrixWorld);
+    this.effectEmitters.planeEngineR.set(2.5, -0.58, -0.6).applyMatrix4(this.plane.matrixWorld);
+    this.effectEmitters.shipPos.copy(this.ship.position);
+    this.effectEmitters.shipDir = this.shipVelSign;
+    this.effectEmitters.shipFunnel.set(
+      this.ship.position.x - this.shipVelSign * 13.6,
+      this.ship.position.y + 9.2,
+      this.ship.position.z
+    );
+    this.effectEmitters.tugPos.copy(this.tug.position);
+    this.effectEmitters.tugDir = this.tugVelSign;
+  }
+
+  getMovingVehicleSpots(outArr) {
+    outArr.length = 0;
+    for (let i = 0; i < this.totalVehicles; i++) {
+      const v = this.vehicles[i];
+      if (v.curSpeed < 4.5) continue;
+      const wx = v.axis === 'z' ? v.roadCoord + v.laneOffset : v.pos;
+      const wz = v.axis === 'z' ? v.pos : v.roadCoord - v.laneOffset;
+      outArr.push({ x: wx, z: wz, dir: v.dir, axis: v.axis });
+    }
+    return outArr;
   }
 }

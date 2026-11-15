@@ -35,13 +35,13 @@ export function createProceduralTextures(maxAniso = 8) {
   roughCanvas.height = wH;
   const rghCtx = roughCanvas.getContext('2d');
 
-  wctx.fillStyle = '#182232';
+  wctx.fillStyle = '#334155';
   wctx.fillRect(0, 0, wW, wH);
   ectx.fillStyle = '#000000';
   ectx.fillRect(0, 0, wW, wH);
-  bctx.fillStyle = '#dcdce0';
+  bctx.fillStyle = '#ededf0';
   bctx.fillRect(0, 0, wW, wH);
-  rghCtx.fillStyle = '#858585';
+  rghCtx.fillStyle = '#a8a8a8';
   rghCtx.fillRect(0, 0, wW, wH);
 
   const cols = 10;
@@ -50,11 +50,11 @@ export function createProceduralTextures(maxAniso = 8) {
   const ch = wH / rows;
 
   for (let r = 0; r < rows; r++) {
-    // Spandrel structural floor slab band
-    wctx.fillStyle = '#263347';
+    // Anodized aluminum spandrel structural floor slab band + subtle bevel highlight
+    wctx.fillStyle = '#475569';
     wctx.fillRect(0, r * ch, wW, 9);
-    wctx.fillStyle = '#334155';
-    wctx.fillRect(0, r * ch + 9, wW, 2);
+    wctx.fillStyle = '#94a3b8';
+    wctx.fillRect(0, r * ch + 8, wW, 2);
 
     for (let c = 0; c < cols; c++) {
       const gx = c * cw + 3;
@@ -62,34 +62,44 @@ export function createProceduralTextures(maxAniso = 8) {
       const gw = cw - 6;
       const gh = ch - 14;
 
-      const grad = wctx.createLinearGradient(gx, gy, gx, gy + gh);
+      // Brushed metallic vertical mullion highlight
+      wctx.fillStyle = '#64748b';
+      wctx.fillRect(c * cw, gy, 1.5, gh);
+
+      const grad = wctx.createLinearGradient(gx, gy, gx + gw * 0.4, gy + gh);
       const seed = (r * 17 + c * 31) % 11;
-      grad.addColorStop(0, seed > 3 ? '#3c6890' : '#264463');
-      grad.addColorStop(0.55, '#19314a');
-      grad.addColorStop(1, '#0c1828');
+      grad.addColorStop(0, seed > 3 ? '#6aa8d8' : '#4a83b0');
+      grad.addColorStop(0.45, '#2b597d');
+      grad.addColorStop(1, '#11253a');
       wctx.fillStyle = grad;
       wctx.fillRect(gx, gy, gw, gh);
 
-      // Subtle interior Venetian blinds on upper portion of random office bays
+      // Diagonal architectural glazing sky-glint sheen
+      if ((r + c) % 4 === 0) {
+        wctx.fillStyle = 'rgba(224, 242, 254, 0.16)';
+        wctx.fillRect(gx + 2, gy + 2, gw * 0.36, gh - 4);
+      }
+
+      // Subtle interior Venetian blinds & ceiling luminaire strip on random office bays
       if (seed % 3 === 0) {
-        wctx.fillStyle = 'rgba(203, 213, 225, 0.16)';
+        wctx.fillStyle = 'rgba(226, 232, 240, 0.22)';
         for (let b = 0; b < 5; b++) {
-          wctx.fillRect(gx + 1, gy + 2 + b * 3, gw - 2, 1.5);
+          wctx.fillRect(gx + 1, gy + 2 + b * 3, gw - 2, 1.4);
         }
       }
 
-      bctx.fillStyle = '#323232';
+      bctx.fillStyle = '#282828';
       bctx.fillRect(gx, gy, gw, gh);
-      rghCtx.fillStyle = '#121212';
+      rghCtx.fillStyle = '#0a0a0a';
       rghCtx.fillRect(gx, gy, gw, gh);
 
       const roomLit = ((r * 7 + Math.floor(c / 2) * 13) % 9) < 5;
       if (roomLit) {
         const warm = ((r + Math.floor(c / 2)) % 3) !== 0;
         const eGrad = ectx.createLinearGradient(gx, gy, gx, gy + gh);
-        eGrad.addColorStop(0, warm ? '#fff4cc' : '#e0f2fe');
-        eGrad.addColorStop(0.65, warm ? '#f59e0b' : '#38bdf8');
-        eGrad.addColorStop(1, 'rgba(15, 23, 42, 0.2)');
+        eGrad.addColorStop(0, warm ? '#fffbeb' : '#e0f2fe');
+        eGrad.addColorStop(0.55, warm ? '#fbbf24' : '#38bdf8');
+        eGrad.addColorStop(1, 'rgba(15, 23, 42, 0.22)');
         ectx.fillStyle = eGrad;
         ectx.fillRect(gx + 1, gy + 1, gw - 2, gh - 2);
       }
@@ -226,7 +236,7 @@ export function createProceduralTextures(maxAniso = 8) {
     stCtx.fillRect((i * 53) % 256, (i * 97) % 256, 2, 2);
   }
 
-  // 2b. Paved Urban Sidewalk Paver Tiles (Albedo + Bump)
+  // 2b. Bright Sunlit Architectural Granite & Travertine Paver Tiles (Albedo + Bump)
   const swCanvas = document.createElement('canvas');
   swCanvas.width = 512;
   swCanvas.height = 512;
@@ -235,22 +245,24 @@ export function createProceduralTextures(maxAniso = 8) {
   swBumpCanvas.width = 512;
   swBumpCanvas.height = 512;
   const swBCtx = swBumpCanvas.getContext('2d');
-  swCtx.fillStyle = '#475569';
+  swCtx.fillStyle = '#9aa5b5';
   swCtx.fillRect(0, 0, 512, 512);
   swBCtx.fillStyle = '#5a5a5a';
   swBCtx.fillRect(0, 0, 512, 512);
   const tile = 32;
   for (let y = 0; y < 512; y += tile) {
-    for (let x = 0; x < 512; x += tile) {
-      const v = 96 + (((x * 13 + y * 29) % 19) - 9);
-      swCtx.fillStyle = `rgb(${v}, ${v + 4}, ${v + 9})`;
-      swCtx.fillRect(x + 1, y + 1, tile - 2, tile - 2);
-      swBCtx.fillStyle = '#c4c4c4';
-      swBCtx.fillRect(x + 1, y + 1, tile - 2, tile - 2);
+    const rowShift = ((y / tile) % 2) * 16;
+    for (let x = -tile; x < 512; x += tile) {
+      const tx = x + rowShift;
+      const v = 186 + (((Math.abs(tx) * 13 + y * 29) % 21) - 10);
+      swCtx.fillStyle = `rgb(${v + 4}, ${v + 5}, ${v + 7})`;
+      swCtx.fillRect(tx + 1, y + 1, tile - 2, tile - 2);
+      swBCtx.fillStyle = '#d0d0d0';
+      swBCtx.fillRect(tx + 1, y + 1, tile - 2, tile - 2);
     }
   }
-  for (let i = 0; i < 5000; i++) {
-    swCtx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.045)';
+  for (let i = 0; i < 6500; i++) {
+    swCtx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)';
     swCtx.fillRect((i * 97) % 512, (i * 193) % 512, 2, 2);
   }
 
@@ -565,7 +577,7 @@ export function createProceduralTextures(maxAniso = 8) {
     runCtx.fillRect(123, y, 10, 30);
   }
 
-  // 9. Multi-Octave Water Bump Map
+  // 9. Multi-Octave Water Bump Map + Seamless 512x512 RGB Tangent-Space Water Normal Map
   const waterCanvas = document.createElement('canvas');
   waterCanvas.width = 256;
   waterCanvas.height = 256;
@@ -582,6 +594,222 @@ export function createProceduralTextures(maxAniso = 8) {
       wtCtx.fillStyle = `rgb(${v},${v},${v})`;
       wtCtx.fillRect(x, y, 2, 2);
     }
+  }
+
+  // Seamless periodic multi-octave heightfield -> analytic RGB tangent-space normal map
+  const wnSize = 512;
+  const wnData = new Uint8Array(wnSize * wnSize * 4);
+  const wnWaves = [
+    [2, 3, 1.0, 0.4],
+    [-4, 2, 0.72, 1.7],
+    [5, -5, 0.48, 2.9],
+    [-8, -6, 0.30, 0.8],
+    [11, 7, 0.18, 4.1],
+    [-14, 13, 0.11, 2.2],
+    [21, -17, 0.065, 5.0],
+    [-26, -23, 0.04, 1.3],
+  ];
+  const TAU = Math.PI * 2;
+  for (let y = 0; y < wnSize; y++) {
+    const v = (y / wnSize) * TAU;
+    for (let x = 0; x < wnSize; x++) {
+      const u = (x / wnSize) * TAU;
+      let dhdu = 0;
+      let dhdv = 0;
+      for (let w = 0; w < wnWaves.length; w++) {
+        const [kx, ky, amp, phase] = wnWaves[w];
+        const arg = kx * u + ky * v + phase;
+        const c = Math.cos(arg) * amp;
+        dhdu += kx * c;
+        dhdv += ky * c;
+      }
+      // Steepness-scaled tangent normal (nx, ny, 1.0)
+      const strength = 0.085;
+      let nx = -dhdu * strength;
+      let ny = -dhdv * strength;
+      let nz = 1.0;
+      const invLen = 1.0 / Math.hypot(nx, ny, nz);
+      nx *= invLen;
+      ny *= invLen;
+      nz *= invLen;
+      const idx = (y * wnSize + x) * 4;
+      wnData[idx] = Math.round((nx * 0.5 + 0.5) * 255);
+      wnData[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+      wnData[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+      wnData[idx + 3] = 255;
+    }
+  }
+  const waterNormalMap = new THREE.DataTexture(wnData, wnSize, wnSize, THREE.RGBAFormat);
+  waterNormalMap.colorSpace = THREE.NoColorSpace;
+  waterNormalMap.wrapS = THREE.RepeatWrapping;
+  waterNormalMap.wrapT = THREE.RepeatWrapping;
+  waterNormalMap.anisotropy = maxAniso;
+  waterNormalMap.needsUpdate = true;
+
+  // 9b. Patchy Rain-Puddle Road Roughness Map (low roughness in wheel ruts & gutters, coarse grain elsewhere)
+  const rrCanvas = document.createElement('canvas');
+  rrCanvas.width = 512;
+  rrCanvas.height = 512;
+  const rrCtx = rrCanvas.getContext('2d');
+  rrCtx.fillStyle = '#dcdcdc';
+  rrCtx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 65; i++) {
+    const px = ((i * 89) % 440) + 36;
+    const py = ((i * 173) % 480) + 16;
+    const rx = 18 + (i % 5) * 8;
+    const ry = 36 + (i % 7) * 14;
+    const g = rrCtx.createRadialGradient(px, py, 3, px, py, Math.max(rx, ry));
+    g.addColorStop(0, '#181818');
+    g.addColorStop(0.55, '#343434');
+    g.addColorStop(1, 'rgba(220,220,220,0)');
+    rrCtx.fillStyle = g;
+    rrCtx.save();
+    rrCtx.translate(px, py);
+    rrCtx.scale(rx / Math.max(rx, ry), ry / Math.max(rx, ry));
+    rrCtx.beginPath();
+    rrCtx.arc(0, 0, Math.max(rx, ry), 0, Math.PI * 2);
+    rrCtx.fill();
+    rrCtx.restore();
+  }
+  for (let i = 0; i < 6000; i++) {
+    rrCtx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+    rrCtx.fillRect((i * 71) % 512, (i * 137) % 512, 2, 2);
+  }
+
+  // 10. Soft Volumetric FBM-style Smoke / Cloud / Dust Puff Sprite (128x128 radial wisps)
+  const smokeCanvas = document.createElement('canvas');
+  smokeCanvas.width = 128;
+  smokeCanvas.height = 128;
+  const smCtx = smokeCanvas.getContext('2d');
+  smCtx.clearRect(0, 0, 128, 128);
+  const smokeLobes = [
+    [64, 64, 52, 0.36],
+    [48, 56, 36, 0.28],
+    [80, 58, 34, 0.28],
+    [60, 44, 32, 0.25],
+    [68, 78, 34, 0.24],
+    [44, 72, 28, 0.20],
+    [84, 72, 26, 0.20],
+  ];
+  for (const [lx, ly, lr, la] of smokeLobes) {
+    const g = smCtx.createRadialGradient(lx, ly, lr * 0.08, lx, ly, lr);
+    g.addColorStop(0, `rgba(255, 255, 255, ${la})`);
+    g.addColorStop(0.45, `rgba(245, 248, 252, ${la * 0.62})`);
+    g.addColorStop(0.78, `rgba(226, 232, 240, ${la * 0.22})`);
+    g.addColorStop(1, 'rgba(226, 232, 240, 0)');
+    smCtx.fillStyle = g;
+    smCtx.beginPath();
+    smCtx.arc(lx, ly, lr, 0, Math.PI * 2);
+    smCtx.fill();
+  }
+
+  // 11. Smooth Optical Inverse-Square Light Halo Sprite (128x128)
+  const haloCanvas = document.createElement('canvas');
+  haloCanvas.width = 128;
+  haloCanvas.height = 128;
+  const hlCtx = haloCanvas.getContext('2d');
+  const hlGrad = hlCtx.createRadialGradient(64, 64, 2, 64, 64, 62);
+  hlGrad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+  hlGrad.addColorStop(0.14, 'rgba(255, 247, 224, 0.72)');
+  hlGrad.addColorStop(0.38, 'rgba(254, 232, 168, 0.26)');
+  hlGrad.addColorStop(0.72, 'rgba(251, 191, 36, 0.06)');
+  hlGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+  hlCtx.fillStyle = hlGrad;
+  hlCtx.fillRect(0, 0, 128, 128);
+
+  // 12. Tapered Raindrop Streak Texture (16x64)
+  const rainCanvas = document.createElement('canvas');
+  rainCanvas.width = 16;
+  rainCanvas.height = 64;
+  const rnCtx = rainCanvas.getContext('2d');
+  const rnGrad = rnCtx.createLinearGradient(0, 0, 0, 64);
+  rnGrad.addColorStop(0, 'rgba(210, 235, 255, 0)');
+  rnGrad.addColorStop(0.3, 'rgba(215, 238, 255, 0.42)');
+  rnGrad.addColorStop(0.78, 'rgba(240, 249, 255, 0.85)');
+  rnGrad.addColorStop(0.95, 'rgba(255, 255, 255, 0.65)');
+  rnGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  rnCtx.fillStyle = rnGrad;
+  rnCtx.beginPath();
+  rnCtx.ellipse(8, 32, 3.2, 30, 0, 0, Math.PI * 2);
+  rnCtx.fill();
+
+  // 13. Water Splash & Ocean Wake Ripple Ring Texture (64x64)
+  const splashCanvas = document.createElement('canvas');
+  splashCanvas.width = 64;
+  splashCanvas.height = 64;
+  const spCtx = splashCanvas.getContext('2d');
+  const spGrad = spCtx.createRadialGradient(32, 32, 10, 32, 32, 30);
+  spGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  spGrad.addColorStop(0.55, 'rgba(224, 242, 254, 0.14)');
+  spGrad.addColorStop(0.76, 'rgba(240, 249, 255, 0.78)');
+  spGrad.addColorStop(0.88, 'rgba(224, 242, 254, 0.35)');
+  spGrad.addColorStop(1, 'rgba(224, 242, 254, 0)');
+  spCtx.fillStyle = spGrad;
+  spCtx.fillRect(0, 0, 64, 64);
+
+  // 14. Incandescent Spark Ember Texture (32x32)
+  const sparkCanvas = document.createElement('canvas');
+  sparkCanvas.width = 32;
+  sparkCanvas.height = 32;
+  const skCtx = sparkCanvas.getContext('2d');
+  const skGrad = skCtx.createRadialGradient(16, 16, 1, 16, 16, 15);
+  skGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  skGrad.addColorStop(0.28, 'rgba(255, 224, 130, 0.92)');
+  skGrad.addColorStop(0.65, 'rgba(249, 115, 22, 0.38)');
+  skGrad.addColorStop(1, 'rgba(249, 115, 22, 0)');
+  skCtx.fillStyle = skGrad;
+  skCtx.fillRect(0, 0, 32, 32);
+
+  const prepClamp = (canvas, isColor = true) => {
+    const tex = new THREE.CanvasTexture(canvas);
+    if (isColor) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.needsUpdate = true;
+    return tex;
+  };
+
+  // 15. Landscaped Architectural Plot Parcel Texture (Bright stone apron edge + groomed meadow lawn + surveyor corners)
+  const ppCanvas = document.createElement('canvas');
+  ppCanvas.width = 256;
+  ppCanvas.height = 256;
+  const ppCtx = ppCanvas.getContext('2d');
+  const ppBumpCanvas = document.createElement('canvas');
+  ppBumpCanvas.width = 256;
+  ppBumpCanvas.height = 256;
+  const ppBCtx = ppBumpCanvas.getContext('2d');
+
+  // Pale neutral stone outer collar (adapts cleanly to instance tint!)
+  ppCtx.fillStyle = '#dce2ea';
+  ppCtx.fillRect(0, 0, 256, 256);
+  ppBCtx.fillStyle = '#a0a0a0';
+  ppBCtx.fillRect(0, 0, 256, 256);
+
+  // Inner parcel lawn/pad with subtle architectural cross-hatching & organic foliage blades
+  ppCtx.fillStyle = '#eef4eb';
+  ppCtx.fillRect(14, 14, 228, 228);
+  ppBCtx.fillStyle = '#787878';
+  ppBCtx.fillRect(14, 14, 228, 228);
+  for (let i = 0; i < 4500; i++) {
+    const px = 16 + ((i * 73 + (i % 7) * 11) % 224);
+    const py = 16 + ((i * 139 + (i % 5) * 13) % 224);
+    ppCtx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(95,120,85,0.16)';
+    ppCtx.fillRect(px, py, 2, 3);
+    ppBCtx.fillStyle = i % 2 === 0 ? '#9c9c9c' : '#585858';
+    ppBCtx.fillRect(px, py, 2, 2);
+  }
+  // Crisp subtle mowed diagonal turf stripes + stone seam inset + surveyor corner L-brackets
+  ppCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  for (let s = 16; s < 236; s += 28) {
+    ppCtx.fillRect(s, 14, 14, 228);
+  }
+  ppCtx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
+  ppCtx.lineWidth = 2;
+  ppCtx.strokeRect(14, 14, 228, 228);
+  ppCtx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+  for (const [cx, cy, dx, dy] of [[22, 22, 1, 1], [234, 22, -1, 1], [22, 234, 1, -1], [234, 234, -1, -1]]) {
+    ppCtx.fillRect(cx - (dx < 0 ? 14 : 0), cy - (dy < 0 ? 2 : 0), 14, 2);
+    ppCtx.fillRect(cx - (dx < 0 ? 2 : 0), cy - (dy < 0 ? 14 : 0), 2, 14);
   }
 
   return {
@@ -601,12 +829,15 @@ export function createProceduralTextures(maxAniso = 8) {
     sidewalkBump: prep(swBumpCanvas, 2, 2, false),
     grassMap: prep(grCanvas, 12, 12, true),
     grassBump: prep(grBumpCanvas, 12, 12, false),
+    plotPadMap: prepClamp(ppCanvas, true),
+    plotPadBump: prepClamp(ppBumpCanvas, false),
     barkMap: prep(bkCanvas, 1, 2, true),
     barkBump: prep(bkBumpCanvas, 1, 2, false),
     leafMap: prep(lfCanvas, 1, 1, true),
     leafBump: prep(lfBumpCanvas, 1, 1, false),
     roadMap: prep(roadCanvas, 1, 18, true),
     roadBump: prep(roadBumpCanvas, 1, 18, false),
+    roadRoughMap: prep(rrCanvas, 1, 18, false),
     crosswalkMap: prep(crossCanvas, 1, 1, true),
     solarMap: prep(solarCanvas, 2, 2, true),
     helipadMap: prep(heliCanvas, 1, 1, true),
@@ -614,5 +845,11 @@ export function createProceduralTextures(maxAniso = 8) {
     headlightBeam: prep(beamCanvas, 1, 1, false),
     runwayMap: prep(runCanvas, 1, 3, true),
     waterBump: prep(waterCanvas, 32, 32, false),
+    waterNormalMap,
+    smokePuffMap: prepClamp(smokeCanvas, true),
+    lightHaloMap: prepClamp(haloCanvas, true),
+    rainStreakMap: prepClamp(rainCanvas, true),
+    splashRingMap: prepClamp(splashCanvas, true),
+    sparkMap: prepClamp(sparkCanvas, true),
   };
 }
